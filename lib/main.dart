@@ -72,7 +72,7 @@ class _MyHomePageState extends State<MyHomePage> {
       await process.exitCode;
     } catch (e) {
       setState(() {
-        _firewallResult = 'Error disabling whitelist: $e';
+        _firewallResult = 'Error disabling COP: $e';
       });
     }
   }
@@ -81,27 +81,44 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _enableWhitelist() async {
     setState(() { _firewallResult = ''; });
     try {
-      // Build a comma-separated list of single-quoted domains for PowerShell
-      final domains = whitelist.map((d) => "'$d'").join(',');
-      // Revised command: use .Where() method and double quotes for rule name to avoid quoting issues.
-      String command = """netsh advfirewall set allprofiles firewallpolicy blockinbound,blockoutbound; foreach (\$domain in @($domains)) { \$ips = ((Resolve-DnsName \$domain -ErrorAction Stop).Where({ \$_.IPAddress -match '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+\\\\.\\\\d+\$' })).IPAddress -join ','; netsh advfirewall firewall add rule name="Allow \$domain" dir=out action=allow protocol=any remoteip=\$ips; }""";
+      List<String> commands = [];
+      // Reset firewall policy to block traffic.
+      commands.add("netsh advfirewall set allprofiles firewallpolicy blockinbound,blockoutbound");
+      
+      for (final domain in whitelist) {
+        try {
+          List<InternetAddress> addresses = await InternetAddress.lookup(domain);
+          // Filter IPv4 addresses.
+          List<String> ipList = addresses
+              .where((ip) => ip.type == InternetAddressType.IPv4)
+              .map((ip) => ip.address)
+              .toList();
+          if (ipList.isNotEmpty) {
+            String ips = ipList.join(',');
+            commands.add("netsh advfirewall firewall add rule name='Allow $domain' dir=out action=allow protocol=any remoteip=$ips");
+          } else {
+            commands.add("Write-Output 'No IPv4 address found for $domain'");
+          }
+        } catch (e) {
+          commands.add("Write-Output 'Error resolving $domain: $e'");
+        }
+      }
+      
+      String innerCommand = commands.join("; ");
+      
+      String elevatedCommand = "Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-Command','${innerCommand.replaceAll("'", "''")}')";
       
       Process ruleProcess = await Process.start(
         'powershell.exe',
         [
           '-NoProfile',
-          '-ExecutionPolicy',
-          'Bypass',
+          '-ExecutionPolicy', 'Bypass',
           '-Command',
-          'Start-Process',
-          'powershell.exe',
-          '-Verb', 'RunAs',
-          '-ArgumentList',
-          '\'-NoProfile -ExecutionPolicy Bypass -NoExit -Command "$command"\'',
+          elevatedCommand,
         ],
         runInShell: true,
       );
-
+      
       ruleProcess.stdout.transform(utf8.decoder).listen((data) {
         setState(() { _firewallResult += data + "\n"; });
       });
