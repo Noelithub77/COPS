@@ -77,14 +77,14 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // Updated: enables whitelist mode: block all and add allow rules in one elevated call.
+  // Updated: enables whitelist mode without using Where-Object and with adjusted quoting.
   Future<void> _enableWhitelist() async {
     setState(() { _firewallResult = ''; });
     try {
-      // Build a comma-separated list of quoted domains for PowerShell
-      final domains = whitelist.map((d) => '"$d"').join(',');
-      // Single PowerShell command to block all and allow whitelist domains in one call.
-      String command = """netsh advfirewall set allprofiles firewallpolicy blockinbound,blockoutbound; foreach (\$domain in @($domains)) { \$ips = (Resolve-DnsName \$domain -ErrorAction Stop | Where-Object { \$_.IPAddress -match '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+\\\\.\\\\d+\$' } | Select-Object -ExpandProperty IPAddress) -join ','; netsh advfirewall firewall add rule name="Allow \$domain" dir=out action=allow protocol=any remoteip=\$ips; }""";
+      // Build a comma-separated list of single-quoted domains for PowerShell
+      final domains = whitelist.map((d) => "'$d'").join(',');
+      // Revised command: use .Where() method and double quotes for rule name to avoid quoting issues.
+      String command = """netsh advfirewall set allprofiles firewallpolicy blockinbound,blockoutbound; foreach (\$domain in @($domains)) { \$ips = ((Resolve-DnsName \$domain -ErrorAction Stop).Where({ \$_.IPAddress -match '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+\\\\.\\\\d+\$' })).IPAddress -join ','; netsh advfirewall firewall add rule name="Allow \$domain" dir=out action=allow protocol=any remoteip=\$ips; }""";
       
       Process ruleProcess = await Process.start(
         'powershell.exe',
@@ -177,7 +177,7 @@ class _MyHomePageState extends State<MyHomePage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
+        title: SelectableText(widget.title), // updated
       ),
       body: Center(
         child: Column(
@@ -187,17 +187,15 @@ class _MyHomePageState extends State<MyHomePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text("Whitelist Mode"),
+                const SelectableText("COP?"), // updated
                 Switch(
                   value: _whitelistEnabled,
                   onChanged: _toggleWhitelistMode,
                 ),
               ],
             ),
-            Text(
-              _firewallResult,
-            ),
-            Text(
+            SelectableText(_firewallResult), // updated
+            SelectableText(
               '$_counter',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
@@ -206,7 +204,7 @@ class _MyHomePageState extends State<MyHomePage> {
               child: const Text('Reset Firewall'),
             ),
             SingleChildScrollView(
-              child: Text(
+              child: SelectableText( // updated
                 _firewallResult,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
