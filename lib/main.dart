@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'dart:convert'; // for utf8 and LineSplitter
-import 'package:socket_io_client/socket_io_client.dart' as IO; // new import
+import 'dart:convert'; 
+import 'package:socket_io_client/socket_io_client.dart' as IO; 
 
 void main() {
   runApp(const MyApp());
@@ -36,11 +36,9 @@ class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
   String _firewallResult = '';
   
-  // New: whitelist of allowed domains.
   final List<String> whitelist = ['codeforces.com'];
   bool _whitelistEnabled = false;
   
-  // New: socket connection instance.
   late IO.Socket _socket;
 
   final TextEditingController _handleController = TextEditingController(); // new
@@ -48,10 +46,10 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    _initializeSocket(); // new: initialize socket
+    _initializeSocket();
   }
 
-  // New: initialize the socket connection.
+  
   void _initializeSocket() {
     _socket = IO.io('http://127.0.0.1:6969', <String, dynamic>{
       'transports': ['websocket'],
@@ -79,7 +77,6 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  // New: disables whitelist mode: allow all inbound/outbound.
   Future<void> _disableWhitelist() async {
     setState(() { _firewallResult = ''; });
     try {
@@ -111,27 +108,22 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // Updated: enables whitelist mode without using Where-Object and with adjusted quoting.
   Future<void> _enableWhitelist() async {
     setState(() { _firewallResult = ''; });
     try {
       List<String> commands = [];
-      // Reset firewall policy to block traffic.
       commands.add("netsh advfirewall set allprofiles firewallpolicy blockinbound,blockoutbound");
       
       for (final domain in whitelist) {
         try {
           List<InternetAddress> addresses = await InternetAddress.lookup(domain);
-          // Filter IPv4 addresses.
-          List<String> ipList = addresses
-              .where((ip) => ip.type == InternetAddressType.IPv4)
-              .map((ip) => ip.address)
-              .toList();
+          List<String> ipList = addresses.map((ip) => ip.address).toList();
+          
           if (ipList.isNotEmpty) {
             String ips = ipList.join(',');
             commands.add("netsh advfirewall firewall add rule name='Allow $domain' dir=out action=allow protocol=any remoteip=$ips");
           } else {
-            commands.add("Write-Output 'No IPv4 address found for $domain'");
+            commands.add("Write-Output 'No IP address found for $domain'");
           }
         } catch (e) {
           commands.add("Write-Output 'Error resolving $domain: $e'");
