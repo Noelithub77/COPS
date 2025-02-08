@@ -6,3 +6,5 @@
 
 - Executes elevated `netsh` scripts on your PC.
 - Ensures network rules are aligned with contest requirements.
+
+![alt text](image-1.png)

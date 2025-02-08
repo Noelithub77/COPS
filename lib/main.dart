@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:process_run/shell.dart';
+import 'dart:io';
+import 'dart:convert'; // for utf8 and LineSplitter
 
 void main() {
   runApp(const MyApp());
@@ -41,17 +42,47 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _resetFirewall() async {
-    final shell = Shell();
+    setState(() { _firewallResult = ''; });  // Clear previous output
     try {
-      var result = await shell.run('''
-        powershell -Command "Start-Process powershell -ArgumentList '-Command \\"netsh advfirewall show allprofiles\\"' -Verb runAs -Wait"
-      ''');
-      setState(() {
-        _firewallResult = result.outText;
-      });
+      // Start the process, streaming output to the UI.
+      Process process = await Process.start(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-ExecutionPolicy', 'Bypass',
+          '-Command',
+          'Start-Process',
+          'powershell.exe',
+          '-Verb', 'RunAs',
+          '-ArgumentList',
+          '\'-NoProfile -ExecutionPolicy Bypass -NoExit -Command "netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound"\'',
+        ],
+        runInShell: true,
+      );
+
+      process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((line) {
+          setState(() {
+            _firewallResult += line + '\n';
+          });
+        });
+      
+      // Listen to stderr
+      process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((line) {
+          setState(() {
+            _firewallResult += "Error: " + line + "\n";
+          });
+        });
+      
+      await process.exitCode;
     } catch (e) {
       setState(() {
-        _firewallResult = 'Failed to reset firewall: $e';
+        _firewallResult = 'Failed to reset firewall: $e\n${e.toString()}';
       });
     }
   }
@@ -67,8 +98,8 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+            Text(
+              _firewallResult,
             ),
             Text(
               '$_counter',
@@ -78,9 +109,11 @@ class _MyHomePageState extends State<MyHomePage> {
               onPressed: _resetFirewall,
               child: const Text('Reset Firewall'),
             ),
-            Text(
-              _firewallResult,
-              style: Theme.of(context).textTheme.bodyMedium,
+            SingleChildScrollView(
+              child: Text(
+                _firewallResult,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
           ],
         ),
