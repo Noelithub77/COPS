@@ -11,12 +11,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'COPS',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 249, 55, 84)),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'COPS'),
     );
   }
 }
@@ -44,7 +44,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final shell = Shell();
     try {
       var result = await shell.run('''
-        powershell -Command "Start-Process powershell -ArgumentList '-Command \\"netsh advfirewall reset\\"' -Verb runAs -Wait"
+        powershell -Command "Start-Process powershell -ArgumentList '-Command \\"netsh advfirewall show allprofiles\\"' -Verb runAs -Wait"
       ''');
       setState(() {
         _firewallResult = result.outText;

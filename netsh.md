@@ -19,3 +19,6 @@ netsh advfirewall firewall add rule name="Allow Codeforces" dir=out action=allow
 ![alt text](image.png)
 netsh advfirewall firewall show rule name="Allow Codeforces"
 -continusly check if the rule is enabled if not trigger an alert to the server
+
+## All enabled rules, if some other rules cut:
+Get-NetFirewallRule -PolicyStore PersistentStore | Where-Object { $_.Enabled -eq $true } | Format-Table -AutoSize
