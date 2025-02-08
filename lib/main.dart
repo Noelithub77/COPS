@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:convert'; // for utf8 and LineSplitter
+import 'package:socket_io_client/socket_io_client.dart' as IO; // new import
 
 void main() {
   runApp(const MyApp());
@@ -38,6 +39,39 @@ class _MyHomePageState extends State<MyHomePage> {
   // New: whitelist of allowed domains.
   final List<String> whitelist = ['codeforces.com'];
   bool _whitelistEnabled = false;
+  
+  // New: socket connection instance.
+  late IO.Socket _socket;
+
+  final TextEditingController _handleController = TextEditingController(); // new
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeSocket(); // new: initialize socket
+  }
+
+  // New: initialize the socket connection.
+  void _initializeSocket() {
+    _socket = IO.io('http://127.0.0.1:6969', <String, dynamic>{
+      'transports': ['websocket'],
+    });
+    _socket.on('connect', (_) {
+      setState(() {
+        _firewallResult += "Socket connected\n";
+      });
+    });
+    _socket.on('response', (data) {
+      setState(() {
+        _firewallResult += "Response: $data\n";
+      });
+    });
+    _socket.on('disconnect', (_) {
+      setState(() {
+        _firewallResult += "Socket disconnected\n";
+      });
+    });
+  }
 
   void _incrementCounter() {
     setState(() {
@@ -134,9 +168,24 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // New: toggle method to choose which function to run.
+  // New: send Codeforces handle to backend.
+  void _submitHandle() {
+    final handle = _handleController.text;
+    _socket.emit('handle', {'handle': handle});
+    setState(() {
+      _firewallResult += "Handle sent: $handle\n";
+    });
+  }
+  
+  // New: modified toggle method to emit toggle state and send handle when turned off.
   Future<void> _toggleWhitelistMode(bool enabled) async {
     setState(() { _whitelistEnabled = enabled; });
+    // Always send toggle state.
+    _socket.emit('toggle', {'state': enabled});
+    // When turning off, update backend with the latest handle.
+    if (!enabled) {
+      _socket.emit('handle', {'handle': _handleController.text});
+    }
     if (enabled) {
       await _enableWhitelist();
     } else {
@@ -200,6 +249,21 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
+            // New: Codeforces handle input.
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: TextField(
+                controller: _handleController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Codeforces Handle',
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _submitHandle,
+              child: const Text('Submit Handle'),
+            ),
             // New: toggle switch for whitelist mode.
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
