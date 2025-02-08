@@ -34,6 +34,10 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
   String _firewallResult = '';
+  
+  // New: whitelist of allowed domains.
+  final List<String> whitelist = ['codeforces.com'];
+  bool _whitelistEnabled = false;
 
   void _incrementCounter() {
     setState(() {
@@ -41,10 +45,10 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  Future<void> _resetFirewall() async {
-    setState(() { _firewallResult = ''; });  // Clear previous output
+  // New: disables whitelist mode: allow all inbound/outbound.
+  Future<void> _disableWhitelist() async {
+    setState(() { _firewallResult = ''; });
     try {
-      // Start the process, streaming output to the UI.
       Process process = await Process.start(
         'powershell.exe',
         [
@@ -56,6 +60,87 @@ class _MyHomePageState extends State<MyHomePage> {
           '-Verb', 'RunAs',
           '-ArgumentList',
           '\'-NoProfile -ExecutionPolicy Bypass -NoExit -Command "netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound"\'',
+        ],
+        runInShell: true,
+      );
+      process.stdout.transform(utf8.decoder).listen((data) {
+        setState(() { _firewallResult += data + "\n"; });
+      });
+      process.stderr.transform(utf8.decoder).listen((err) {
+        setState(() { _firewallResult += "Error: " + err + "\n"; });
+      });
+      await process.exitCode;
+    } catch (e) {
+      setState(() {
+        _firewallResult = 'Error disabling whitelist: $e';
+      });
+    }
+  }
+
+  // Updated: enables whitelist mode: block all and add allow rules in one elevated call.
+  Future<void> _enableWhitelist() async {
+    setState(() { _firewallResult = ''; });
+    try {
+      // Build a comma-separated list of quoted domains for PowerShell
+      final domains = whitelist.map((d) => '"$d"').join(',');
+      // Single PowerShell command to block all and allow whitelist domains in one call.
+      String command = """netsh advfirewall set allprofiles firewallpolicy blockinbound,blockoutbound; foreach (\$domain in @($domains)) { \$ips = (Resolve-DnsName \$domain -ErrorAction Stop | Where-Object { \$_.IPAddress -match '^\\\\d+\\\\.\\\\d+\\\\.\\\\d+\\\\.\\\\d+\$' } | Select-Object -ExpandProperty IPAddress) -join ','; netsh advfirewall firewall add rule name="Allow \$domain" dir=out action=allow protocol=any remoteip=\$ips; }""";
+      
+      Process ruleProcess = await Process.start(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          'Start-Process',
+          'powershell.exe',
+          '-Verb', 'RunAs',
+          '-ArgumentList',
+          '\'-NoProfile -ExecutionPolicy Bypass -NoExit -Command "$command"\'',
+        ],
+        runInShell: true,
+      );
+
+      ruleProcess.stdout.transform(utf8.decoder).listen((data) {
+        setState(() { _firewallResult += data + "\n"; });
+      });
+      ruleProcess.stderr.transform(utf8.decoder).listen((err) {
+        setState(() { _firewallResult += "Error: " + err + "\n"; });
+      });
+      await ruleProcess.exitCode;
+      setState(() { _firewallResult += "Whitelist enabled\n"; });
+    } catch (e) {
+      setState(() {
+        _firewallResult = 'Error enabling whitelist: $e';
+      });
+    }
+  }
+
+  // New: toggle method to choose which function to run.
+  Future<void> _toggleWhitelistMode(bool enabled) async {
+    setState(() { _whitelistEnabled = enabled; });
+    if (enabled) {
+      await _enableWhitelist();
+    } else {
+      await _disableWhitelist();
+    }
+  }
+
+  Future<void> _resetFirewall() async {
+    setState(() { _firewallResult = ''; }); 
+    try {
+      Process process = await Process.start(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-ExecutionPolicy', 'Bypass',
+          '-Command',
+          'Start-Process',
+          'powershell.exe',
+          '-Verb', 'RunAs',
+          '-ArgumentList',
+          '\'-NoProfile -ExecutionPolicy Bypass -NoExit -Command "netsh advfirewall reset"\'',
         ],
         runInShell: true,
       );
@@ -98,6 +183,17 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
+            // New: toggle switch for whitelist mode.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text("Whitelist Mode"),
+                Switch(
+                  value: _whitelistEnabled,
+                  onChanged: _toggleWhitelistMode,
+                ),
+              ],
+            ),
             Text(
               _firewallResult,
             ),
